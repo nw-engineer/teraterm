@@ -46,9 +46,28 @@
 
 #include "sendmem.h"
 
+#include "filesys_log.h"
 #include "ttdde.h"
 
 #define TitSend L"Sending file"
+
+
+static void CommitLogFromSendMemW(const wchar_t *buf, size_t len)
+{
+       size_t i;
+       if (!FLogIsOpendText() || buf == NULL) {
+               return;
+       }
+       for (i = 0; i < len; i++) {
+               wchar_t ch = buf[i];
+               if (ch == L'\b')
+                       FLogInputBackspace(1);
+               else if (ch == L'\r' || ch == L'\n')
+                       FLogInputCommitLine(TRUE);
+               else if (ch >= 0x20 || ch == L'\t')
+                       FLogInputAppendW(&ch, 1);
+       }
+}
 
 typedef enum {
 	SendMemTypeText,
@@ -495,6 +514,7 @@ void SendMemContinuously(void)
 	else {
 		const wchar_t *str_ptr = (wchar_t *)&p->send_ptr[p->send_index];
 		int str_len = (int)(send_len / sizeof(wchar_t));
+               CommitLogFromSendMemW(str_ptr, str_len);
 		if (p->send_host_enable) {
 			CommTextOutW(p->cv_, str_ptr, str_len);
 		}

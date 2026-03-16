@@ -41,6 +41,7 @@
 
 #include "tttypes_key.h"
 #include "ttlib.h"
+#include "filesys_log.h"
 #include "ttsetup.h"
 #include "ttcommon.h"
 #include "ttwinman.h"
@@ -51,6 +52,13 @@
 
 #include "keyboard.h"
 #include "keyboard_i.h"
+
+static BOOL IsCommitLogChar(wchar_t ch)
+{
+        return (ch >= 0x20 || ch == L'\t');
+}
+
+
 
 BOOL AutoRepeatMode;
 BOOL AppliKeyMode;
@@ -1485,7 +1493,19 @@ KeyDownResult KeyDown(HWND HWin, WORD VKey, WORD Count, WORD Scan)
 				if (TalkStatus == IdTalkKeyb) {
 					for (i = 1; i <= CodeCount; i++) {
 						if (ts.LocalEcho > 0)
-							CommTextEchoW(&cv, Code, CodeLength);
+						        CommTextEchoW(&cv, Code, CodeLength);
+						if (FLogIsOpendText()) {
+						        size_t j;
+						        for (j = 0; j < CodeLength; j++) {
+						                wchar_t ch = Code[j];
+						                if (ch == L'\b')
+						                        FLogInputBackspace(1);
+						                else if (ch == L'\r' || ch == L'\n')
+						                        FLogInputCommitLine(TRUE);
+						                else if (IsCommitLogChar(ch))
+						                        FLogInputAppendW(&ch, 1);
+						        }
+						}
 						CommTextOutW(&cv, Code, CodeLength);
 					}
 				}

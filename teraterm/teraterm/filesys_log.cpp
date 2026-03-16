@@ -49,6 +49,7 @@
 
 #include "filesys_log.h"
 #include "filesys.h"  // for ProtoGetProtoFlag()
+#include <string>
 
 #define TitLog      L"Logging"
 
@@ -103,6 +104,7 @@ typedef struct {
 	int BuffSize;		// バッファサイズ (=InBuffSize)
 
 	CRITICAL_SECTION filelog_lock;   /* ロック用変数 */
+       std::wstring InputCommitBuf;
 } TFileVar;
 typedef TFileVar *PFileVar;
 
@@ -110,6 +112,62 @@ static PFileVar LogVar = NULL;
 
 // 遅延書き込み用スレッドのメッセージ
 #define WM_DPC_LOGTHREAD_SEND (WM_APP + 1)
+
+
+void FLogInputAppendW(const wchar_t *str, size_t len)
+{
+       PFileVar fv = LogVar;
+       size_t i;
+
+       if (fv == NULL || fv->LogMode != TFileVar::LogModeTag::TEXT_MODE || str == NULL) {
+               return;
+       }
+
+       for (i = 0; i < len; i++) {
+               wchar_t ch = str[i];
+               if (ch >= 0x20 || ch == L'\t') {
+                       fv->InputCommitBuf.push_back(ch);
+               }
+       }
+}
+
+void FLogInputBackspace(int count)
+{
+       PFileVar fv = LogVar;
+
+       if (fv == NULL || fv->LogMode != TFileVar::LogModeTag::TEXT_MODE) {
+               return;
+       }
+
+       while (count > 0 && !fv->InputCommitBuf.empty()) {
+               fv->InputCommitBuf.pop_back();
+               count--;
+       }
+}
+
+void FLogInputCommitLine(BOOL append_newline)
+{
+       PFileVar fv = LogVar;
+
+       if (fv == NULL || fv->LogMode != TFileVar::LogModeTag::TEXT_MODE) {
+               return;
+       }
+
+       OutputStr(fv, fv->InputCommitBuf.c_str());
+       if (append_newline) {
+               OutputStr(fv, L"\r\n");
+       }
+       LogToFile(fv);
+       fv->InputCommitBuf.clear();
+}
+
+void FLogInputClear(void)
+{
+       PFileVar fv = LogVar;
+       if (fv != NULL) {
+               fv->InputCommitBuf.clear();
+       }
+}
 
 static void OutputStr(PFileVar fv, const wchar_t *str);
 static void LogToFile(PFileVar fv);
@@ -748,6 +806,7 @@ void FLogClose(void)
 		return;
 	}
 
+	fv->InputCommitBuf.clear();
 	FileTransEnd_(fv);
 	LogVar = NULL;
 }
